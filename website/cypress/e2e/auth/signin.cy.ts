@@ -14,11 +14,16 @@ describe("signin flow", () => {
     cy.request("GET", "/api/auth/csrf")
       .then((response) => {
         const csrfToken = response.body.csrfToken;
-        cy.request("POST", "/api/auth/signin/email", {
-          callbackUrl: "/",
-          email: emailAddress,
-          csrfToken,
-          json: "true",
+        cy.request({
+          method: "POST",
+          url: "/api/auth/signin/email",
+          body: {
+            callbackUrl: "/",
+            email: emailAddress,
+            csrfToken,
+            json: "true",
+            captcha: "XXXX.DUMMY.TOKEN.XXXX",
+          },
         });
       })
       .then((response) => {
@@ -26,13 +31,6 @@ describe("signin flow", () => {
           cy.get('[data-cy="username"]').should("exist");
         });
       });
-  });
-  it("shows the logged in users email address if logged in with email", () => {
-    const emailAddress = "user@example.com";
-    cy.signInWithEmail(emailAddress);
-    // The user will only see the email address if the window is wide enough, not technically required as even when hidden this will find it in the page.
-    cy.viewport(1920, 1000);
-    cy.contains('[data-cy="username"]', emailAddress);
   });
 });
 

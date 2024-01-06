@@ -1,7 +1,7 @@
 # Detoxify evaluation
 
-[Detoxify](https://github.com/unitaryai/detoxify) is a open source model used to
-identify prompts as toxic
+[Detoxify](https://github.com/unitaryai/detoxify) is an open source model used
+to identify prompts as toxic
 
 <img  src="https://raw.githubusercontent.com/unitaryai/detoxify/master/examples.png"  alt="Image from detoxify github that shows the example input/output of their model"  />
 
@@ -15,7 +15,7 @@ trained on
 | multilingual | xlm-roberta-base  | Multilingual Toxic Comment Classification  |
 
 Unbiased and original models also have a 'small' version - but since normal
-models are not memory heavy, and small models perform noticably worse, they are
+models are not memory heavy, and small models perform noticeably worse, they are
 only described in the notebook
 
 ## All tests below were ran on a 3090TI
@@ -43,13 +43,13 @@ Detoxify was tested on 4 different types of inputs
 
 ### Sentences used for testing and rating are contained inside the .ipynb
 
-|  Model name  |                                      Not obviously toxic                                       |                         Not obviously non-toxic                         |                         Obviously toxic                          | Obviously non-toxic |
-| :----------: | :--------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------: | :--------------------------------------------------------------: | :-----------------: |
-|   original   | failed at all, easily accepted racist, sexist overally toxic prompts that were well formulated |       Very sensitive on swear words, failed to reckognize context       |                         good performance                         |  good performance   |
-|   unbiased   |                 Managed to find some hidden toxicity but not on all sentences                  | Very sensitive explicit language but shown ability to recognize context | Did well but failed to reckognize some gender stereotype mockery |  good performance   |
-| multilingual |                 Managed to find some hidden toxicity but not on all sentences                  | Very sensitive explicit language but shown ability to recognize context | Did well but failed to reckognize some gender stereotype mockery |  good performance   |
+|  Model name  |                                      Not obviously toxic                                       |                         Not obviously non-toxic                         |                         Obviously toxic                         | Obviously non-toxic |
+| :----------: | :--------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------: | :-------------------------------------------------------------: | :-----------------: |
+|   original   | failed at all, easily accepted racist, sexist overally toxic prompts that were well formulated |       Very sensitive on swear words, failed to recognize context        |                        good performance                         |  good performance   |
+|   unbiased   |                 Managed to find some hidden toxicity but not on all sentences                  | Very sensitive explicit language but shown ability to recognize context | Did well but failed to recognize some gender stereotype mockery |  good performance   |
+| multilingual |                 Managed to find some hidden toxicity but not on all sentences                  | Very sensitive explicit language but shown ability to recognize context | Did well but failed to recognize some gender stereotype mockery |  good performance   |
 
-Subjectivly 'unbiased' looks like the best performing model.
+Subjectively 'unbiased' looks like the best performing model.
 
 I don't think it would do well as a security layer in a live version of open
 assistant unless we do some finetuning first, because it can be fooled to pass

@@ -1,35 +1,81 @@
-import { Button } from "@chakra-ui/react";
-import { useColorMode } from "@chakra-ui/react";
+import { Box, Flex, useColorModeValue } from "@chakra-ui/react";
+import { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PropsWithChildren } from "react";
-import { RxDragHandleDots2 } from "react-icons/rx";
+import { GripVertical } from "lucide-react";
+import { PointerEventHandler, PropsWithChildren, useMemo } from "react";
 
-export const SortableItem = ({ children, id }: PropsWithChildren<{ id: number }>) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
+import { MessageSyntheticBadge } from "../Messages/MessageSyntheticBadge";
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    touchAction: "none",
-  };
+export const SortableItem = ({
+  children,
+  id,
+  index,
+  isEditable,
+  isDisabled,
+  OpenModal,
+  synthetic,
+}: PropsWithChildren<{
+  id: number;
+  index: number;
+  isEditable: boolean;
+  isDisabled: boolean;
+  OpenModal: () => void;
+  synthetic: boolean | null;
+}>) => {
+  const backgroundColor = useColorModeValue("gray.700", "gray.500");
+  const disabledBackgroundColor = useColorModeValue("gray.400", "gray.700");
+  const activeBackgroundColor = useColorModeValue("gray.600", "gray.600");
+  const textColor = useColorModeValue("white", "white");
 
-  const { colorMode } = useColorMode();
-  const themedClasses =
-    colorMode === "light"
-      ? "bg-slate-600 hover:bg-slate-500 text-white"
-      : "bg-black hover:bg-slate-900 text-white ring-1 ring-white/30 ring-inset hover:ring-slate-200/50";
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id, disabled: !isEditable });
+  const pcListeners = { onKeyDown: listeners?.onKeyDown, onMouseDown: listeners?.onMouseDown } as SyntheticListenerMap;
+  const sx = useMemo(
+    () => ({
+      "&:active": {
+        bg: `${isEditable ? activeBackgroundColor : backgroundColor}`,
+        cursor: `${isEditable ? "grabbing" : "default"}`,
+      },
+    }),
+    [isEditable, activeBackgroundColor, backgroundColor]
+  );
 
   return (
-    <li
-      className={`grid grid-cols-[min-content_1fr] items-center rounded-lg shadow-md gap-x-2 p-2 ${themedClasses}`}
+    <Box
+      sx={sx}
+      transform={CSS.Translate.toString(transform)}
+      transition={transition}
+      display="flex"
+      alignItems="center"
+      bg={isDisabled ? disabledBackgroundColor : backgroundColor}
+      borderRadius="lg"
+      p="4"
+      whiteSpace="pre-wrap"
+      color={textColor}
       ref={setNodeRef}
-      style={style}
+      shadow="base"
+      {...attributes}
+      {...pcListeners}
+      aria-roledescription="sortable"
+      className="relative"
     >
-      <Button justifyContent="center" variant="ghost" {...attributes} {...listeners}>
-        <RxDragHandleDots2 />
-      </Button>
+      <Box pr="4">{isEditable ? <GripVertical size="20px" /> : `${index + 1}.`}</Box>
       {children}
-    </li>
+      <div
+        onClick={OpenModal}
+        onPointerDown={listeners?.onPointerDown as PointerEventHandler<HTMLDivElement>}
+        className="w-[67%] lg:w-[80%]  h-full  absolute ltr:left-0 rtl:right-0 top-0 touch-none"
+      ></div>
+      <Flex
+        position="absolute"
+        gap="2"
+        top="-2.5"
+        style={{
+          insetInlineEnd: "1.25rem",
+        }}
+      >
+        {synthetic && <MessageSyntheticBadge />}
+      </Flex>
+    </Box>
   );
 };

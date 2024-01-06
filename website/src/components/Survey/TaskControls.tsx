@@ -1,47 +1,84 @@
-import { useColorMode } from "@chakra-ui/react";
-import { Flex } from "@chakra-ui/react";
-import clsx from "clsx";
-import { SkipButton } from "src/components/Buttons/Skip";
+import { Card, Flex, IconButton, Progress, Tooltip } from "@chakra-ui/react";
+import { Edit2 } from "lucide-react";
+import { useTranslation } from "next-i18next";
 import { SubmitButton } from "src/components/Buttons/Submit";
 import { TaskInfo } from "src/components/TaskInfo/TaskInfo";
+import { TaskStatus } from "src/components/Tasks/Task";
+import { BaseTask } from "src/types/Task";
+
+import { SkipButton } from "../Buttons/Skip";
 
 export interface TaskControlsProps {
-  // we need a task type
-  // eslint-disable-next-line  @typescript-eslint/no-explicit-any
-  tasks: any[];
-  className?: string;
-  onSubmitResponse: (task: { id: string }) => void;
+  task: BaseTask;
+  taskStatus: TaskStatus;
+  isLoading: boolean;
+  isSubmitting: boolean;
+  isRejecting: boolean;
+  onEdit: () => void;
+  onReview: () => void;
+  onSubmit: () => void;
   onSkip: () => void;
 }
 
-export const TaskControls = (props: TaskControlsProps) => {
-  const { colorMode } = useColorMode();
-  const isLightMode = colorMode === "light";
-  const endTask = props.tasks[props.tasks.length - 1];
+export const TaskControls = ({
+  task,
+  taskStatus,
+  isLoading,
+  isRejecting,
+  isSubmitting,
+  onEdit,
+  onReview,
+  onSubmit,
+  onSkip,
+}: TaskControlsProps) => {
+  const { t } = useTranslation();
+
   return (
-    <section
-      className={clsx(
-        "flex-row justify-items-stretch mb-8 p-4 rounded-lg max-w-7xl mx-auto space-y-4 sm:space-y-0 sm:flex",
-        props.className,
-        {
-          "bg-white text-gray-800 shadow-lg": isLightMode,
-          "bg-slate-800 text-slate-400 shadow-xl ring-1 ring-white/10 ring-inset": !isLightMode,
-        }
-      )}
-    >
-      <TaskInfo id={props.tasks[0].id} output="Submit your answer" />
-      <Flex justify="center" ml="auto" gap={2}>
-        <SkipButton>Skip</SkipButton>
-        {endTask.task.type !== "task_done" ? (
-          <SubmitButton colorScheme="blue" data-cy="submit" onClick={() => props.onSubmitResponse(props.tasks[0])}>
-            Submit
-          </SubmitButton>
-        ) : (
-          <SubmitButton colorScheme="green" data-cy="next-task" onClick={props.onSkip}>
-            Next Task
-          </SubmitButton>
-        )}
+    <Card>
+      {isLoading && <Progress size="sm" isIndeterminate />}
+      <Flex p="6" gap="4" direction={["column", "row"]}>
+        <TaskInfo id={task.id} output={t("submit_your_answer")} />
+        <Flex width={["full", "fit-content"]} justify="center" ml="auto" gap={2}>
+          {taskStatus.mode === "EDIT" ? (
+            <>
+              <SkipButton
+                onSkip={onSkip}
+                confirmSkip={taskStatus.replyValidity === "VALID"}
+                isLoading={isRejecting}
+              ></SkipButton>
+              <SubmitButton
+                colorScheme="blue"
+                data-cy="review"
+                isDisabled={taskStatus.replyValidity === "INVALID"}
+                onClick={onReview}
+              >
+                {t("review")}
+              </SubmitButton>
+            </>
+          ) : (
+            <>
+              <Tooltip label={t("edit")}>
+                <IconButton
+                  size="lg"
+                  data-cy="edit"
+                  aria-label={t("edit")}
+                  onClick={onEdit}
+                  icon={<Edit2 size="1em" />}
+                />
+              </Tooltip>
+              <SubmitButton
+                colorScheme="green"
+                data-cy="submit"
+                isLoading={isSubmitting}
+                isDisabled={taskStatus.mode === "SUBMITTED"}
+                onClick={onSubmit}
+              >
+                {t("submit")}
+              </SubmitButton>
+            </>
+          )}
+        </Flex>
       </Flex>
-    </section>
+    </Card>
   );
 };

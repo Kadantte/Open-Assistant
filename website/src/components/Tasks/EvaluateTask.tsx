@@ -1,52 +1,82 @@
-import { useState } from "react";
+import { Box, Checkbox, useColorModeValue } from "@chakra-ui/react";
+import { useTranslation } from "next-i18next";
+import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { MessageConversation } from "src/components/Messages/MessageConversation";
 import { Sortable } from "src/components/Sortable/Sortable";
 import { SurveyCard } from "src/components/Survey/SurveyCard";
-import { TaskControlsOverridable } from "src/components/Survey/TaskControlsOverridable";
+import { TaskSurveyProps } from "src/components/Tasks/Task";
+import { TaskHeader } from "src/components/Tasks/TaskHeader";
+import { Message } from "src/types/Conversation";
+import { TaskType } from "src/types/Task";
+import { EvaluateTaskReply } from "src/types/TaskResponses";
+import { RankTaskType } from "src/types/Tasks";
 
-import { MessageTable } from "../Messages/MessageTable";
-
-export const EvaluateTask = ({ tasks, trigger, mutate, mainBgClasses }) => {
-  const [ranking, setRanking] = useState<number[]>([]);
-  const submitResponse = (task) => {
-    trigger({
-      id: task.id,
-      update_type: "message_ranking",
-      content: {
-        ranking,
-      },
-    });
-  };
-
-  const fetchNextTask = () => {
-    setRanking([]);
-    mutate();
-  };
-  let messages = null;
-  if (tasks[0].task.conversation) {
-    messages = tasks[0].task.conversation.messages;
-    messages = messages.map((message, index) => ({ ...message, id: index }));
+export const EvaluateTask = ({
+  task,
+  taskType,
+  isEditable,
+  isDisabled,
+  onReplyChanged,
+  onValidityChanged,
+}: TaskSurveyProps<RankTaskType, EvaluateTaskReply>) => {
+  const cardColor = useColorModeValue("gray.50", "gray.800");
+  const [ranking, setRanking] = useState<number[] | null>(null);
+  const [notRankable, setNotRankable] = useState(false);
+  let messages: Message[] = [];
+  if (task.type !== TaskType.rank_initial_prompts) {
+    messages = task.conversation.messages;
   }
 
-  const sortables = tasks[0].task.replies ? "replies" : "prompts";
+  useEffect(() => {
+    if (ranking === null) {
+      if (task.type === TaskType.rank_initial_prompts) {
+        onReplyChanged({ ranking: task.prompts.map((_, idx) => idx), not_rankable: notRankable });
+      } else {
+        onReplyChanged({ ranking: task.replies.map((_, idx) => idx), not_rankable: notRankable });
+      }
+      onValidityChanged(notRankable ? "VALID" : "DEFAULT");
+    } else {
+      onReplyChanged({ ranking, not_rankable: notRankable });
+      onValidityChanged("VALID");
+    }
+  }, [task, ranking, onReplyChanged, onValidityChanged, notRankable]);
 
+  const handleNotRankableChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setNotRankable(e.target.checked);
+  }, []);
+
+  const { t } = useTranslation("tasks");
+  // @notmd: I haven't test `rank_initial_prompts` type yet
+  const sortableItems =
+    task.type === TaskType.rank_initial_prompts ? (task.prompts as unknown as Message[]) : task.reply_messages;
   return (
-    <div className={`p-12 ${mainBgClasses}`}>
-      <SurveyCard className="max-w-7xl mx-auto h-fit mb-24">
-        <h5 className="text-lg font-semibold mb-4">Instructions</h5>
-        <p className="text-lg py-1">
-          Given the following {sortables}, sort them from best to worst, best being first, worst being last.
-        </p>
-        {messages ? <MessageTable messages={messages} /> : null}
-        <Sortable items={tasks[0].task[sortables]} onChange={setRanking} className="my-8" />
-      </SurveyCard>
-
-      <TaskControlsOverridable
-        tasks={tasks}
-        isValid={ranking.length == tasks[0].task[sortables].length}
-        prepareForSubmit={() => setRanking(tasks[0].task[sortables].map((_, idx) => idx))}
-        onSubmitResponse={submitResponse}
-        onSkip={fetchNextTask}
-      />
+    <div data-cy="task" data-task-type="evaluate-task">
+      <Box mb="4">
+        <SurveyCard>
+          <TaskHeader taskType={taskType} />
+          <Box mt="4" p="6" borderRadius="lg" bg={cardColor}>
+            <MessageConversation messages={messages} highlightLastMessage />
+          </Box>
+          <Box mt="8">
+            <Sortable
+              items={sortableItems}
+              isDisabled={isDisabled}
+              isEditable={isEditable}
+              revealSynthetic={task.reveal_synthetic}
+              onChange={setRanking}
+            />
+            <Checkbox
+              size="lg"
+              mt="4"
+              checked={notRankable}
+              isDisabled={isDisabled || !isEditable}
+              onChange={handleNotRankableChange}
+            >
+              {t("not_rankable")}
+            </Checkbox>
+          </Box>
+        </SurveyCard>
+      </Box>
     </div>
   );
 };

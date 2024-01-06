@@ -1,38 +1,25 @@
 import { Box, CircularProgress, SimpleGrid, Text, useColorModeValue } from "@chakra-ui/react";
 import Head from "next/head";
-import { useEffect, useState } from "react";
-import { getDashboardLayout } from "src/components/Layout";
-import { MessageTable } from "src/components/Messages/MessageTable";
-import fetcher from "src/lib/fetcher";
+import { useTranslation } from "next-i18next";
+import { DashboardLayout } from "src/components/Layout";
+import { MessageConversation } from "src/components/Messages/MessageConversation";
+import { get } from "src/lib/api";
 import useSWRImmutable from "swr/immutable";
+export { getStaticProps } from "src/lib/defaultServerSideProps";
+import UserMessageConversation from "src/components/UserMessageConversation";
+import { useCurrentLocale } from "src/hooks/locale/useCurrentLocale";
+import { getLocaleDisplayName } from "src/lib/languages";
+import { API_ROUTES } from "src/lib/routes";
 
 const MessagesDashboard = () => {
-  const boxBgColor = useColorModeValue("white", "gray.700");
+  const { t } = useTranslation(["message"]);
+  const boxBgColor = useColorModeValue("white", "gray.800");
   const boxAccentColor = useColorModeValue("gray.200", "gray.900");
 
-  const [messages, setMessages] = useState([]);
-  const [userMessages, setUserMessages] = useState([]);
+  const lang = useCurrentLocale();
+  const { data: messages } = useSWRImmutable(API_ROUTES.RECENT_MESSAGES({ lang }), get, { revalidateOnMount: true });
 
-  const { isLoading: isLoadingAll, mutate: mutateAll } = useSWRImmutable("/api/messages", fetcher, {
-    onSuccess: (data) => {
-      setMessages(data);
-    },
-  });
-
-  const { isLoading: isLoadingUser, mutate: mutateUser } = useSWRImmutable(`/api/messages/user`, fetcher, {
-    onSuccess: (data) => {
-      setUserMessages(data);
-    },
-  });
-
-  useEffect(() => {
-    if (messages.length == 0) {
-      mutateAll();
-    }
-    if (userMessages.length == 0) {
-      mutateUser();
-    }
-  }, [messages, userMessages]);
+  const currentLanguage = useCurrentLocale();
 
   return (
     <>
@@ -40,10 +27,12 @@ const MessagesDashboard = () => {
         <title>Messages - Open Assistant</title>
         <meta name="description" content="Chat with Open Assistant and provide feedback." />
       </Head>
-      <SimpleGrid columns={[1, 1, 1, 2]} gap={4}>
+      <SimpleGrid columns={[1, 1, 1, 1, 1, 2]} gap={4}>
         <Box>
           <Text className="text-2xl font-bold" pb="4">
-            Most recent messages
+            {t("recent_messages", {
+              language: getLocaleDisplayName(currentLanguage),
+            })}
           </Text>
           <Box
             backgroundColor={boxBgColor}
@@ -52,12 +41,16 @@ const MessagesDashboard = () => {
             borderRadius="xl"
             className="p-6 shadow-sm"
           >
-            {isLoadingAll ? <CircularProgress isIndeterminate /> : <MessageTable messages={messages} />}
+            {messages ? (
+              <MessageConversation enableLink messages={messages} showCreatedDate />
+            ) : (
+              <CircularProgress isIndeterminate />
+            )}
           </Box>
         </Box>
         <Box>
           <Text className="text-2xl font-bold" pb="4">
-            Your most recent messages
+            {t("your_recent_messages")}
           </Text>
           <Box
             backgroundColor={boxBgColor}
@@ -66,7 +59,7 @@ const MessagesDashboard = () => {
             borderRadius="xl"
             className="p-6 shadow-sm"
           >
-            {isLoadingUser ? <CircularProgress isIndeterminate /> : <MessageTable messages={userMessages} />}
+            <UserMessageConversation />
           </Box>
         </Box>
       </SimpleGrid>
@@ -74,6 +67,6 @@ const MessagesDashboard = () => {
   );
 };
 
-MessagesDashboard.getLayout = (page) => getDashboardLayout(page);
+MessagesDashboard.getLayout = DashboardLayout;
 
 export default MessagesDashboard;

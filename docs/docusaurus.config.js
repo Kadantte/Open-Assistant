@@ -29,16 +29,38 @@ const config = {
     defaultLocale: "en",
     locales: ["en"],
   },
+  markdown: {
+    mermaid: true,
+  },
+  themes: ["@docusaurus/theme-mermaid"],
 
   presets: [
     [
-      "classic",
+      "docusaurus-preset-openapi",
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
           sidebarPath: require.resolve("./sidebars.js"),
         },
-        blog: false,
+        api: {
+          path: "docs/api/",
+        },
+        blog: {
+          routeBasePath: "/blog",
+          showReadingTime: true,
+          blogTitle: "OpenAssistant Blog",
+          blogDescription: "Home of the OpenAssistant blog.",
+          blogSidebarTitle: "Blog Posts",
+          blogSidebarCount: "ALL",
+          postsPerPage: "ALL",
+          feedOptions: {
+            type: "all",
+            title: "OpenAssistant Blog",
+            description: "Home of the OpenAssistant blog.",
+            language: "en",
+            copyright: `Copyright © ${new Date().getFullYear()} OpenAssistant.`,
+          },
+        },
         theme: {
           customCss: require.resolve("./src/css/custom.css"),
         },
@@ -57,12 +79,23 @@ const config = {
         },
         items: [
           {
+            href: "https://open-assistant.io/",
+            label: "App",
+            position: "left",
+          },
+          {
+            href: "https://open-assistant.io/chat",
+            label: "Chat",
+            position: "left",
+          },
+          {
             type: "doc",
             docId: "intro",
             position: "left",
             label: "Docs",
           },
-          //{ to: "/blog", label: "Blog", position: "left" },
+          { to: "/blog", label: "Blog", position: "left" },
+          { to: "/api", label: "API", position: "left" },
           {
             href: "https://github.com/LAION-AI/Open-Assistant",
             label: "GitHub",
@@ -96,6 +129,10 @@ const config = {
               {
                 label: "GitHub",
                 href: "https://github.com/LAION-AI/Open-Assistant",
+              },
+              {
+                label: "FAQ",
+                href: "https://projects.laion.ai/Open-Assistant/docs/faq",
               },
             ],
           },

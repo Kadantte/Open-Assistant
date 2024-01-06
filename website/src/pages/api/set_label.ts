@@ -1,23 +1,15 @@
-import { getToken } from "next-auth/jwt";
-import prisma from "src/lib/prismadb";
+import { withoutRole } from "src/lib/auth";
 
 /**
  * Sets the Label in the Backend.
  *
  */
-const handler = async (req, res) => {
-  const token = await getToken({ req });
+const handler = withoutRole("banned", async (req, res, token) => {
+  // TODO: move to oasst_api_client
+  // Parse out the local message_id, and the interaction contents.
+  const { message_id, label_map } = req.body;
 
-  // Return nothing if the user isn't registered.
-  if (!token) {
-    res.status(401).end();
-    return;
-  }
-
-  // Parse out the local message_id, task ID and the interaction contents.
-  const { message_id, post_id, label_map, text } = await JSON.parse(req.body);
-
-  const interactionRes = await fetch(`${process.env.FASTAPI_URL}/api/v1/text_labels`, {
+  const interactionRes = await fetch(`${process.env.FASTAPI_URL}/api/v1/text_labels/`, {
     method: "POST",
     headers: {
       "X-API-Key": process.env.FASTAPI_KEY,
@@ -27,7 +19,8 @@ const handler = async (req, res) => {
       type: "text_labels",
       message_id: message_id,
       labels: label_map,
-      text: text,
+      text: "", // used only in reporting
+      is_report: false,
       user: {
         id: token.sub,
         display_name: token.name || token.email,
@@ -35,7 +28,11 @@ const handler = async (req, res) => {
       },
     }),
   });
+  if (interactionRes.status !== 204) {
+    const r = await interactionRes.json();
+    console.error(JSON.stringify(r));
+  }
   res.status(interactionRes.status).end();
-};
+});
 
 export default handler;

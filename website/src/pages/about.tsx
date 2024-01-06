@@ -4,6 +4,7 @@ import { Container } from "src/components/Container";
 import Roadmap from "src/components/Roadmap";
 import Services from "src/components/Services";
 import Vision from "src/components/Vision";
+export { getStaticProps } from "src/lib/defaultServerSideProps";
 
 const AboutPage = () => {
   return (

@@ -22,7 +22,54 @@ const sidebars = {
         type: "doc",
         id: "guides/README",
       },
-      items: ["guides/prompting"],
+      items: [
+        "guides/guidelines",
+        "guides/examples",
+        {
+          type: "doc",
+          id: "guides/developers",
+          label: "Developers",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Architecture",
+      link: {
+        type: "doc",
+        id: "architecture/README",
+      },
+      items: [
+        "architecture/inference",
+        {
+          type: "doc",
+          id: "architecture/inference",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Plugins",
+      link: {
+        type: "doc",
+        id: "plugins/README",
+      },
+      items: ["plugins/getting-started", "plugins/list"],
+    },
+    {
+      type: "category",
+      label: "Tasks",
+      link: {
+        type: "doc",
+        id: "tasks/README",
+      },
+      items: [
+        "tasks/label_assistant_reply",
+        "tasks/label_prompter_reply",
+        "tasks/reply_as_assistant",
+        "tasks/reply_as_user",
+        "tasks/rank_assistant_replies",
+      ],
     },
     {
       type: "category",
@@ -48,13 +95,14 @@ const sidebars = {
       items: ["research/general", "research/search-based-qa"],
     },
     {
-      type: "category",
+      type: "doc",
       label: "Presentations",
-      link: {
-        type: "doc",
-        id: "presentations/README",
-      },
-      items: ["presentations/list"],
+      id: "presentations/README",
+    },
+    {
+      type: "doc",
+      label: "FAQ",
+      id: "faq",
     },
   ],
 };

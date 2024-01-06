@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from http import HTTPStatus
 from math import ceil
 from pathlib import Path
@@ -9,19 +10,30 @@ import alembic.config
 import fastapi
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
+from fastapi_utils.tasks import repeat_every
 from loguru import logger
-from oasst_backend.api.deps import get_dummy_api_client
+from oasst_backend.api.deps import api_auth, create_api_client
 from oasst_backend.api.v1.api import api_router
+from oasst_backend.api.v1.utils import prepare_conversation
+from oasst_backend.cached_stats_repository import CachedStatsRepository
 from oasst_backend.config import settings
 from oasst_backend.database import engine
-from oasst_backend.prompt_repository import PromptRepository
+from oasst_backend.models import message_tree_state
+from oasst_backend.prompt_repository import PromptRepository, UserRepository
+from oasst_backend.task_repository import TaskRepository, delete_expired_tasks
+from oasst_backend.tree_manager import TreeManager, halt_prompts_of_disabled_users
+from oasst_backend.user_stats_repository import UserStatsRepository, UserStatsTimeFrame
+from oasst_backend.utils.database_utils import CommitMode, managed_tx_function
 from oasst_shared.exceptions import OasstError, OasstErrorCode
 from oasst_shared.schemas import protocol as protocol_schema
+from oasst_shared.utils import utcnow
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from sqlmodel import Session
 from starlette.middleware.cors import CORSMiddleware
 
 app = fastapi.FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_STR}/openapi.json")
+startup_time: datetime = utcnow()
 
 
 @app.exception_handler(OasstError)
@@ -71,6 +83,31 @@ if settings.UPDATE_ALEMBIC:
             logger.exception("Alembic upgrade failed on startup")
 
 
+if settings.OFFICIAL_WEB_API_KEY:
+
+    @app.on_event("startup")
+    def create_official_web_api_client():
+        with Session(engine) as session:
+            try:
+                api_auth(settings.OFFICIAL_WEB_API_KEY, db=session)
+            except OasstError:
+                logger.info("Creating official web API client")
+                create_api_client(
+                    session=session,
+                    api_key=settings.OFFICIAL_WEB_API_KEY,
+                    description="The official web client for the OASST backend.",
+                    frontend_type="web",
+                    trusted=True,
+                )
+
+
+if settings.ENABLE_PROM_METRICS:
+
+    @app.on_event("startup")
+    async def enable_prom_metrics():
+        Instrumentator().instrument(app).expose(app)
+
+
 if settings.RATE_LIMIT:
 
     @app.on_event("startup")
@@ -97,70 +134,173 @@ if settings.RATE_LIMIT:
 if settings.DEBUG_USE_SEED_DATA:
 
     @app.on_event("startup")
-    def seed_data():
+    @managed_tx_function(auto_commit=CommitMode.COMMIT)
+    def create_seed_data(session: Session):
         class DummyMessage(BaseModel):
             task_message_id: str
             user_message_id: str
             parent_message_id: Optional[str]
             text: str
+            lang: Optional[str]
             role: str
+            tree_state: Optional[message_tree_state.State]
+
+        if not settings.OFFICIAL_WEB_API_KEY:
+            raise ValueError("Cannot use seed data without OFFICIAL_WEB_API_KEY")
 
         try:
             logger.info("Seed data check began")
-            with Session(engine) as db:
-                api_client = get_dummy_api_client(db)
-                dummy_user = protocol_schema.User(id="__dummy_user__", display_name="Dummy User", auth_method="local")
-                pr = PromptRepository(db=db, api_client=api_client, user=dummy_user)
 
-                with open(settings.DEBUG_USE_SEED_DATA_PATH) as f:
-                    dummy_messages_raw = json.load(f)
+            api_client = api_auth(settings.OFFICIAL_WEB_API_KEY, db=session)
+            dummy_user = protocol_schema.User(id="__dummy_user__", display_name="Dummy User", auth_method="local")
 
-                dummy_messages = [DummyMessage(**dm) for dm in dummy_messages_raw]
+            ur = UserRepository(db=session, api_client=api_client)
+            tr = TaskRepository(db=session, api_client=api_client, client_user=dummy_user, user_repository=ur)
+            ur.update_user(tr.user_id, enabled=True, show_on_leaderboard=False, tos_acceptance=True)
+            pr = PromptRepository(
+                db=session, api_client=api_client, client_user=dummy_user, user_repository=ur, task_repository=tr
+            )
+            tm = TreeManager(session, pr)
 
-                for msg in dummy_messages:
-                    task = pr.fetch_task_by_frontend_message_id(msg.task_message_id)
-                    if task and not task.ack:
-                        logger.warning("Deleting unacknowledged seed data task")
-                        db.delete(task)
-                        task = None
-                    if not task:
-                        if msg.parent_message_id is None:
-                            task = pr.store_task(
-                                protocol_schema.InitialPromptTask(hint=""), message_tree_id=None, parent_message_id=None
-                            )
-                        else:
-                            parent_message = pr.fetch_message_by_frontend_message_id(
-                                msg.parent_message_id, fail_if_missing=True
-                            )
-                            conversation_messages = pr.fetch_message_conversation(parent_message)
-                            conversation = protocol_schema.Conversation(
-                                messages=[
-                                    protocol_schema.ConversationMessage(
-                                        text=cmsg.text,
-                                        is_assistant=cmsg.role == "assistant",
-                                        message_id=cmsg.id,
-                                        fronend_message_id=cmsg.frontend_message_id,
-                                    )
-                                    for cmsg in conversation_messages
-                                ]
-                            )
-                            task = pr.store_task(
+            with open(settings.DEBUG_USE_SEED_DATA_PATH) as f:
+                dummy_messages_raw = json.load(f)
+
+            dummy_messages = [DummyMessage(**dm) for dm in dummy_messages_raw]
+
+            for msg in dummy_messages:
+                task = tr.fetch_task_by_frontend_message_id(msg.task_message_id)
+                if task and not task.ack:
+                    logger.warning("Deleting unacknowledged seed data task")
+                    session.delete(task)
+                    task = None
+                if not task:
+                    if msg.parent_message_id is None:
+                        task = tr.store_task(
+                            protocol_schema.InitialPromptTask(hint=""), message_tree_id=None, parent_message_id=None
+                        )
+                    else:
+                        parent_message = pr.fetch_message_by_frontend_message_id(
+                            msg.parent_message_id, fail_if_missing=True
+                        )
+                        conversation_messages = pr.fetch_message_conversation(parent_message)
+                        conversation = prepare_conversation(conversation_messages)
+                        if msg.role == "assistant":
+                            task = tr.store_task(
                                 protocol_schema.AssistantReplyTask(conversation=conversation),
                                 message_tree_id=parent_message.message_tree_id,
                                 parent_message_id=parent_message.id,
                             )
-                        pr.bind_frontend_message_id(task.id, msg.task_message_id)
-                        message = pr.store_text_reply(msg.text, msg.task_message_id, msg.user_message_id)
-
-                        logger.info(
-                            f"Inserted: message_id: {message.id}, payload: {message.payload.payload}, parent_message_id: {message.parent_id}"
+                        else:
+                            task = tr.store_task(
+                                protocol_schema.PrompterReplyTask(conversation=conversation),
+                                message_tree_id=parent_message.message_tree_id,
+                                parent_message_id=parent_message.id,
+                            )
+                    tr.bind_frontend_message_id(task.id, msg.task_message_id)
+                    message = pr.store_text_reply(
+                        msg.text,
+                        msg.lang or "en",
+                        msg.task_message_id,
+                        msg.user_message_id,
+                        review_count=5,
+                        review_result=True,
+                        check_tree_state=False,
+                        check_duplicate=False,
+                    )
+                    if message.parent_id is None:
+                        tm._insert_default_state(
+                            root_message_id=message.id,
+                            lang=message.lang,
+                            state=msg.tree_state or message_tree_state.State.GROWING,
                         )
-                    else:
-                        logger.debug(f"seed data task found: {task.id}")
-                logger.info("Seed data check completed")
+                        session.flush()
+
+                    logger.info(
+                        f"Inserted: message_id: {message.id}, payload: {message.payload.payload}, parent_message_id: {message.parent_id}"
+                    )
+                else:
+                    logger.debug(f"seed data task found: {task.id}")
+
+            logger.info("Seed data check completed")
 
         except Exception:
             logger.exception("Seed data insertion failed")
+
+
+@app.on_event("startup")
+def ensure_tree_states():
+    try:
+        logger.info("Startup: TreeManager.ensure_tree_states()")
+        with Session(engine) as db:
+            api_client = api_auth(settings.OFFICIAL_WEB_API_KEY, db=db)
+            tm = TreeManager(db, PromptRepository(db, api_client=api_client))
+            tm.ensure_tree_states()
+
+    except Exception:
+        logger.exception("TreeManager.ensure_tree_states() failed.")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * settings.USER_STATS_INTERVAL_DAY, wait_first=False)
+@managed_tx_function(auto_commit=CommitMode.COMMIT)
+def update_leader_board_day(session: Session) -> None:
+    try:
+        usr = UserStatsRepository(session)
+        usr.update_stats(time_frame=UserStatsTimeFrame.day)
+    except Exception:
+        logger.exception("Error during leaderboard update (daily)")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * settings.USER_STATS_INTERVAL_WEEK, wait_first=False)
+@managed_tx_function(auto_commit=CommitMode.COMMIT)
+def update_leader_board_week(session: Session) -> None:
+    try:
+        usr = UserStatsRepository(session)
+        usr.update_stats(time_frame=UserStatsTimeFrame.week)
+    except Exception:
+        logger.exception("Error during user states update (weekly)")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * settings.USER_STATS_INTERVAL_MONTH, wait_first=False)
+@managed_tx_function(auto_commit=CommitMode.COMMIT)
+def update_leader_board_month(session: Session) -> None:
+    try:
+        usr = UserStatsRepository(session)
+        usr.update_stats(time_frame=UserStatsTimeFrame.month)
+    except Exception:
+        logger.exception("Error during user states update (monthly)")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * settings.USER_STATS_INTERVAL_TOTAL, wait_first=False)
+@managed_tx_function(auto_commit=CommitMode.COMMIT)
+def update_leader_board_total(session: Session) -> None:
+    try:
+        usr = UserStatsRepository(session)
+        usr.update_stats(time_frame=UserStatsTimeFrame.total)
+    except Exception:
+        logger.exception("Error during user states update (total)")
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * 60)  # 1 hour
+@managed_tx_function(auto_commit=CommitMode.COMMIT)
+def cronjob_delete_expired_tasks(session: Session) -> None:
+    delete_expired_tasks(session)
+    halt_prompts_of_disabled_users(session)
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60 * settings.CACHED_STATS_UPDATE_INTERVAL, wait_first=True)
+@managed_tx_function(auto_commit=CommitMode.COMMIT)
+def update_cached_stats(session: Session) -> None:
+    try:
+        csr = CachedStatsRepository(session)
+        csr.update_all_cached_stats()
+    except Exception:
+        logger.exception("Error during cached stats update")
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
@@ -170,7 +310,21 @@ def get_openapi_schema():
     return json.dumps(app.openapi())
 
 
-if __name__ == "__main__":
+def retry_scoring_failed_message_trees():
+    try:
+        logger.info("TreeManager.retry_scoring_failed_message_trees()")
+        with Session(engine) as db:
+            api_client = api_auth(settings.OFFICIAL_WEB_API_KEY, db=db)
+
+            pr = PromptRepository(db=db, api_client=api_client)
+            tm = TreeManager(db, pr)
+            tm.retry_scoring_failed_message_trees()
+
+    except Exception:
+        logger.exception("TreeManager.retry_scoring_failed_message_trees() failed.")
+
+
+def main():
     # Importing here so we don't import packages unnecessarily if we're
     # importing main as a module.
     import argparse
@@ -181,15 +335,30 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--print-openapi-schema",
+        default=False,
         help="Dumps the openapi schema to stdout",
-        action=argparse.BooleanOptionalAction,
+        action="store_true",
     )
     parser.add_argument("--host", help="The host to run the server", default="0.0.0.0")
     parser.add_argument("--port", help="The port to run the server", default=8080)
+    parser.add_argument(
+        "--retry-scoring",
+        default=False,
+        help="Retry scoring failed message trees",
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
     if args.print_openapi_schema:
         print(get_openapi_schema())
-    else:
+
+    if args.retry_scoring:
+        retry_scoring_failed_message_trees()
+
+    if not (args.print_openapi_schema or args.retry_scoring):
         uvicorn.run(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

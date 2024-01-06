@@ -1,29 +1,22 @@
-import { getToken } from "next-auth/jwt";
+import { withoutRole } from "src/lib/auth";
+import { createApiClientFromUser } from "src/lib/oasst_client_factory";
+import { getBackendUserCore } from "src/lib/users";
 
-const handler = async (req, res) => {
-  const token = await getToken({ req });
+const LIMIT = 10;
 
-  // Return nothing if the user isn't registered.
-  if (!token) {
-    res.status(401).end();
-    return;
-  }
+const handler = withoutRole("banned", async (req, res, token) => {
+  const user = await getBackendUserCore(token.sub);
+  const client = createApiClientFromUser(user);
+  const { cursor, direction } = req.query;
 
-  //TODO: add params if needed
-  const params = new URLSearchParams({
-    username: token.sub,
+  const messages = await client.fetch_my_messages_cursor(user, {
+    direction: direction as "back",
+    cursor: cursor as string,
+    max_count: LIMIT,
+    desc: true,
   });
 
-  const messagesRes = await fetch(`${process.env.FASTAPI_URL}/api/v1/messages?${params}`, {
-    method: "GET",
-    headers: {
-      "X-API-Key": process.env.FASTAPI_KEY,
-    },
-  });
-  const messages = await messagesRes.json();
-
-  // Send recieved messages to the client.
   res.status(200).json(messages);
-};
+});
 
 export default handler;

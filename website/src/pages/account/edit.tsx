@@ -1,15 +1,39 @@
-import { Button, Input, InputGroup } from "@chakra-ui/react";
+import { Button, FormControl, FormErrorMessage, Input, InputGroup } from "@chakra-ui/react";
 import Head from "next/head";
 import Router from "next/router";
 import { useSession } from "next-auth/react";
-import React, { useState } from "react";
+import React from "react";
+import { Control, useForm, useWatch } from "react-hook-form";
+import { validDisplayNameRegex } from "src/lib/display_name_validation";
+export { getStaticProps } from "src/lib/defaultServerSideProps";
 
 export default function Account() {
   const { data: session } = useSession();
-  const [username, setUsername] = useState("");
 
-  const updateUser = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
+  if (!session) {
+    return;
+  }
+  return (
+    <>
+      <Head>
+        <title>Open Assistant</title>
+        <meta
+          name="description"
+          content="Conversational AI for everyone. An open source project to create a chat enabled GPT LLM run by LAION and contributors around the world."
+        />
+      </Head>
+      <main className="oa-basic-theme h-3/4 z-0 flex flex-col items-center justify-center">
+        <p>{session.user.name || "No username"}</p>
+        <EditForm />
+      </main>
+    </>
+  );
+}
+
+const EditForm = () => {
+  const { data: session } = useSession();
+
+  const updateUser = async ({ username }: { username: string }) => {
     try {
       const body = { username };
       await fetch("/api/username", {
@@ -24,36 +48,42 @@ export default function Account() {
     }
   };
 
-  if (!session) {
-    return;
-  }
+  const {
+    register,
+    formState: { errors },
+    handleSubmit,
+    control,
+  } = useForm<{ username: string }>({
+    defaultValues: {
+      username: session?.user.name,
+    },
+  });
+
   return (
-    <>
-      <Head>
-        <title>Open Assistant</title>
-        <meta
-          name="description"
-          content="Conversational AI for everyone. An open source project to create a chat enabled GPT LLM run by LAION and contributors around the world."
-        />
-      </Head>
-      <div className="oa-basic-theme">
-        <main className="h-3/4 z-0 flex flex-col items-center justify-center">
-          <p>{session.user.name || "No username"}</p>
-          <form onSubmit={updateUser}>
-            <InputGroup>
-              <Input
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Edit Username"
-                type="text"
-                value={username}
-              ></Input>
-              <Button disabled={!username} type="submit" value="Change">
-                Submit
-              </Button>
-            </InputGroup>
-          </form>
-        </main>
-      </div>
-    </>
+    <form onSubmit={handleSubmit(updateUser)}>
+      <InputGroup>
+        <FormControl isInvalid={errors.username ? true : false}>
+          <Input
+            placeholder="Edit Username"
+            type="text"
+            {...register("username", { required: true, pattern: validDisplayNameRegex })}
+          ></Input>
+          <FormErrorMessage>
+            {errors.username?.type === "required" && "Username is required"}
+            {errors.username?.type === "pattern" && "Username is invalid"}
+          </FormErrorMessage>
+        </FormControl>
+        <SubmitButton control={control}></SubmitButton>
+      </InputGroup>
+    </form>
   );
-}
+};
+
+const SubmitButton = ({ control }: { control: Control<{ username: string }> }) => {
+  const username = useWatch({ control, name: "username" });
+  return (
+    <Button isDisabled={!username} type="submit" value="Change">
+      Submit
+    </Button>
+  );
+};

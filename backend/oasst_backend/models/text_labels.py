@@ -17,11 +17,14 @@ class TextLabels(SQLModel, table=True):
     )
     user_id: UUID = Field(sa_column=sa.Column(pg.UUID(as_uuid=True), sa.ForeignKey("user.id"), nullable=False))
     created_date: Optional[datetime] = Field(
-        sa_column=sa.Column(sa.DateTime(), nullable=False, server_default=sa.func.current_timestamp()),
+        sa_column=sa.Column(
+            sa.DateTime(timezone=True), nullable=False, server_default=sa.func.current_timestamp(), index=True
+        ),
     )
     api_client_id: UUID = Field(nullable=False, foreign_key="api_client.id")
     text: str = Field(nullable=False, max_length=2**16)
     message_id: Optional[UUID] = Field(
-        sa_column=sa.Column(pg.UUID(as_uuid=True), sa.ForeignKey("message.id"), nullable=True)
+        sa_column=sa.Column(pg.UUID(as_uuid=True), sa.ForeignKey("message.id"), nullable=True, index=True)
     )
     labels: dict[str, float] = Field(default={}, sa_column=sa.Column(pg.JSONB), nullable=False)
+    task_id: Optional[UUID] = Field(nullable=True, index=True)

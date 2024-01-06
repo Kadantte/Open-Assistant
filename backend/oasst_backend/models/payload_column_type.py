@@ -48,12 +48,14 @@ def payload_column_type(pydantic_type):
     class PayloadJSONBType(TypeDecorator, Generic[T]):
         impl = pg.JSONB()
 
+        cache_ok = True
+
         def __init__(
             self,
             json_encoder=json,
         ):
             self.json_encoder = json_encoder
-            super(PayloadJSONBType, self).__init__()
+            super().__init__()
 
         # serialize
         def bind_processor(self, dialect):

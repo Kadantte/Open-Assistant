@@ -1,72 +1,74 @@
-// https://nextjs.org/docs/basic-features/layouts
-
+import { Box } from "@chakra-ui/react";
+import { Activity, BarChart2, MessageSquare, Settings, Users } from "lucide-react";
 import type { NextPage } from "next";
-import { FiLayout, FiMessageSquare, FiUsers } from "react-icons/fi";
-import { Header } from "src/components/Header";
+import { PropsWithChildren } from "react";
+import { useSidebarItems } from "src/hooks/layout/sidebarItems";
 
+import { SlimFooter } from "./Dashboard/SlimFooter";
 import { Footer } from "./Footer";
+import { HeaderLayout } from "./Header/Header";
 import { SideMenuLayout } from "./SideMenuLayout";
+import { ToSWrapper } from "./ToSWrapper";
 
 export type NextPageWithLayout<P = unknown, IP = P> = NextPage<P, IP> & {
-  getLayout?: (page: React.ReactElement) => React.ReactNode;
+  getLayout?: (props: PropsWithChildren) => JSX.Element;
 };
 
-export const getDefaultLayout = (page: React.ReactElement) => (
-  <div className="grid grid-rows-[min-content_1fr_min-content] h-full justify-items-stretch">
-    <Header />
-    {page}
+export const DefaultLayout = ({ children }: PropsWithChildren) => (
+  <HeaderLayout>
+    {children}
     <Footer />
-  </div>
+  </HeaderLayout>
 );
 
-export const getTransparentHeaderLayout = (page: React.ReactElement) => (
-  <div className="grid grid-rows-[min-content_1fr_min-content] h-full justify-items-stretch">
-    <Header transparent={true} />
-    {page}
-    <Footer />
-  </div>
-);
+export const DashboardLayout = ({ children }: PropsWithChildren) => {
+  const items = useSidebarItems();
+  return (
+    <HeaderLayout>
+      <ToSWrapper>
+        <SideMenuLayout items={items}>
+          <Box>{children}</Box>
+          <Box mt="10">
+            <SlimFooter />
+          </Box>
+        </SideMenuLayout>
+      </ToSWrapper>
+    </HeaderLayout>
+  );
+};
 
-export const getDashboardLayout = (page: React.ReactElement) => (
-  <div className="grid grid-rows-[min-content_1fr_min-content] h-full justify-items-stretch">
-    <Header transparent={true} />
+export const AdminLayout = ({ children }: PropsWithChildren) => (
+  <HeaderLayout>
     <SideMenuLayout
-      menuButtonOptions={[
+      items={[
         {
-          label: "Dashboard",
-          pathname: "/dashboard",
-          desc: "Dashboard Home",
-          icon: FiLayout,
-        },
-        {
-          label: "Messages",
-          pathname: "/messages",
-          desc: "Messages Dashboard",
-          icon: FiMessageSquare,
-        },
-      ]}
-    >
-      {page}
-    </SideMenuLayout>
-  </div>
-);
-
-export const getAdminLayout = (page: React.ReactElement) => (
-  <div className="grid grid-rows-[min-content_1fr_min-content] h-full justify-items-stretch">
-    <Header transparent={true} />
-    <SideMenuLayout
-      menuButtonOptions={[
-        {
-          label: "Users",
+          labelID: "users",
           pathname: "/admin",
-          desc: "Users Dashboard",
-          icon: FiUsers,
+          icon: Users,
+        },
+        {
+          labelID: "Messages",
+          pathname: "/admin/messages",
+          icon: MessageSquare,
+        },
+        {
+          labelID: "trollboard",
+          pathname: "/admin/trollboard",
+          icon: BarChart2,
+        },
+        {
+          labelID: "status",
+          pathname: "/admin/status",
+          icon: Activity,
+        },
+        {
+          labelID: "parameters",
+          pathname: "/admin/parameters",
+          icon: Settings,
         },
       ]}
     >
-      {page}
+      <Box>{children}</Box>
     </SideMenuLayout>
-  </div>
+  </HeaderLayout>
 );
-
-export const noLayout = (page: React.ReactElement) => page;

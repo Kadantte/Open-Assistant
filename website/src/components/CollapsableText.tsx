@@ -1,36 +1,11 @@
-import {
-  Button,
-  Modal,
-  ModalBody,
-  ModalCloseButton,
-  ModalContent,
-  ModalHeader,
-  ModalOverlay,
-  useDisclosure,
-} from "@chakra-ui/react";
-import React from "react";
+import { useBreakpointValue } from "@chakra-ui/react";
 
-export const CollapsableText = ({ text, maxLength = 220 }) => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  if (typeof text != "string" || text.length <= maxLength) {
-    return text;
+export const CollapsableText = ({ text }: { text: string }) => {
+  const maxLength = useBreakpointValue({ base: 220, md: 500, lg: 700, xl: 1000 });
+  if (typeof text !== "string" || text.length <= maxLength) {
+    return <>{text}</>;
   } else {
-    return (
-      <>
-        {text.substring(0, maxLength - 3)}
-        <Button style={{ display: "contents" }} onClick={onOpen}>
-          ...
-        </Button>
-        <Modal isOpen={isOpen} onClose={onClose} size="xl" scrollBehavior={"inside"}>
-          <ModalOverlay style={{ width: "100%", height: "100%" }}>
-            <ModalContent maxH="400">
-              <ModalHeader>Full Text</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody>{text}</ModalBody>
-            </ModalContent>
-          </ModalOverlay>
-        </Modal>
-      </>
-    );
+    const visibleText = text.substring(0, maxLength - 3);
+    return <span>{visibleText}...</span>;
   }
 };

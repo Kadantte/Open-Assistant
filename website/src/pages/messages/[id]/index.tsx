@@ -1,62 +1,63 @@
-import { Box, Container, Text, useColorModeValue } from "@chakra-ui/react";
+import { Box, Card, CardBody } from "@chakra-ui/react";
+import { GetServerSideProps, InferGetServerSidePropsType } from "next";
 import Head from "next/head";
-import { useState } from "react";
-import { LoadingScreen } from "src/components/Loading/LoadingScreen";
-import { MessageTableEntry } from "src/components/Messages/MessageTableEntry";
-import { MessageWithChildren } from "src/components/Messages/MessageWithChildren";
-import fetcher from "src/lib/fetcher";
-import useSWR from "swr";
+import { useTranslation } from "next-i18next";
+import { serverSideTranslations } from "next-i18next/serverSideTranslations";
+import { DashboardLayout } from "src/components/Layout";
+import { MessageLoading } from "src/components/Loading/MessageLoading";
+import { MessageTree } from "src/components/Messages/MessageTree";
+import { get } from "src/lib/api";
+import { Message, MessageWithChildren } from "src/types/Conversation";
+import useSWRImmutable from "swr/immutable";
 
-const MessageDetail = ({ id }) => {
-  const mainBg = useColorModeValue("bg-slate-300", "bg-slate-900");
+const MessageDetail = ({ id }: InferGetServerSidePropsType<typeof getServerSideProps>) => {
+  const { t } = useTranslation(["message", "common"]);
+  const { data, isLoading, error } = useSWRImmutable<{ tree: MessageWithChildren | null; message?: Message }>(
+    `/api/messages/${id}/tree`,
+    get,
+    {
+      keepPreviousData: true,
+    }
+  );
 
-  const [parent, setParent] = useState(null);
-
-  const { isLoading: isLoadingParent } = useSWR(id ? `/api/messages/${id}/parent` : null, fetcher, {
-    onSuccess: (data) => {
-      setParent(data);
-    },
-    onError: () => {
-      setParent(null);
-    },
-  });
-
-  if (isLoadingParent) {
-    return <LoadingScreen text="Loading..." />;
-  }
   return (
     <>
       <Head>
-        <title>Open Assistant</title>
+        <title>{t("common:title")}</title>
         <meta
           name="description"
           content="Conversational AI for everyone. An open source project to create a chat enabled GPT LLM run by LAION and contributors around the world."
         />
       </Head>
-      <main className={`${mainBg}`}>
-        <Container w="100%" pt={[2, 2, 4, 4]}>
-          {parent && (
-            <>
-              <Text align="center" fontSize="xl">
-                Parent
-              </Text>
-              <Box rounded="lg" p="2">
-                <MessageTableEntry item={parent} idx={1} />
-              </Box>
-            </>
-          )}
-        </Container>
-        <Box pb="4" maxW="full" px="2">
-          <MessageWithChildren id={id} maxDepth={2} />
-        </Box>
-      </main>
+      <Box width="full">
+        <Card>
+          <CardBody p={[3, 4, 6]}>
+            {isLoading && !data && <MessageLoading></MessageLoading>}
+            {error && "Unable to load message tree"}
+            {data &&
+              (data.tree === null ? (
+                "Unable to build tree"
+              ) : (
+                <MessageTree tree={data.tree} messageId={data.message?.id} />
+              ))}
+          </CardBody>
+        </Card>
+      </Box>
     </>
   );
 };
 
-MessageDetail.getInitialProps = async ({ query }) => {
-  const { id } = query;
-  return { id };
-};
+MessageDetail.getLayout = DashboardLayout;
+
+export const getServerSideProps: GetServerSideProps<{ id: string }, { id: string }> = async ({
+  locale = "en",
+  params,
+}) => ({
+  props: {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    id: params!.id,
+    ...(await serverSideTranslations(locale, ["common", "message", "labelling"])),
+  },
+});
 
 export default MessageDetail;

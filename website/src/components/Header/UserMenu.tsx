@@ -1,122 +1,120 @@
-import { Box, Link, Text, useColorModeValue } from "@chakra-ui/react";
-import { Popover } from "@headlessui/react";
-import { AnimatePresence, motion } from "framer-motion";
-import Image from "next/image";
+import {
+  Avatar,
+  Badge,
+  Box,
+  Link,
+  Menu,
+  MenuButton,
+  MenuDivider,
+  MenuGroup,
+  MenuItem,
+  MenuList,
+  Text,
+  useColorModeValue,
+} from "@chakra-ui/react";
+import { AlertTriangle, Layout, LogOut, Settings, Shield } from "lucide-react";
 import NextLink from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import React from "react";
-import { FiLayout, FiLogOut, FiSettings } from "react-icons/fi";
+import { useTranslation } from "next-i18next";
+import React, { ElementType, useCallback } from "react";
+import { UserScore } from "src/components/Header/UserScore";
+import { useHasAnyRole } from "src/hooks/auth/useHasAnyRole";
+
+interface MenuOption {
+  name: string;
+  href: string;
+  icon: ElementType;
+  isExternal: boolean;
+}
 
 export function UserMenu() {
-  const { data: session } = useSession();
-  const backgroundColor = useColorModeValue("white", "gray.700");
-  const accentColor = useColorModeValue("gray.300", "gray.600");
+  const { t } = useTranslation();
+  const borderColor = useColorModeValue("gray.300", "gray.600");
+  const handleSignOut = useCallback(() => {
+    signOut({ callbackUrl: "/" });
+  }, []);
+  const { data: session, status } = useSession();
+  const isAdminOrMod = useHasAnyRole(["admin", "moderator"]);
+  if (!session || status !== "authenticated") {
+    return null;
+  }
+  const options: MenuOption[] = [
+    {
+      name: t("dashboard"),
+      href: "/dashboard",
+      icon: Layout,
+      isExternal: false,
+    },
+    {
+      name: t("account_settings"),
+      href: "/account",
+      icon: Settings,
+      isExternal: false,
+    },
+    {
+      name: t("report_a_bug"),
+      href: "https://github.com/LAION-AI/Open-Assistant/issues/new/choose",
+      icon: AlertTriangle,
+      isExternal: true,
+    },
+  ];
 
-  if (!session) {
-    return <></>;
+  if (isAdminOrMod) {
+    options.unshift({
+      name: t("admin_dashboard"),
+      href: "/admin",
+      icon: Shield,
+      isExternal: false,
+    });
   }
-  if (session && session.user) {
-    const accountOptions = [
-      {
-        name: "Dashboard",
-        href: "/dashboard",
-        desc: "Dashboard",
-        icon: FiLayout,
-        //For future use
-      },
-      {
-        name: "Account Settings",
-        href: "/account",
-        desc: "Account Settings",
-        icon: FiSettings,
-        //For future use
-      },
-    ];
-    return (
-      <Popover className="relative">
-        {({ open }) => (
-          <>
-            <Popover.Button aria-label="Toggle Account Options" className="flex">
-              <Box
-                borderWidth="1px"
-                borderColor={accentColor}
-                className="flex items-center gap-4 p-1 lg:pr-6 rounded-full transition-colors duration-300"
-              >
-                <Image
-                  src={session.user.image || "/images/temp-avatars/av1.jpg"}
-                  alt="Profile Picture"
-                  width="36"
-                  height="36"
-                  className="rounded-full"
-                ></Image>
-                <p data-cy="username" className="hidden lg:flex">
-                  {session.user.name || session.user.email}
-                </p>
-              </Box>
-            </Popover.Button>
-            <AnimatePresence initial={false}>
-              {open && (
-                <Box backgroundColor={backgroundColor}>
-                  <Popover.Panel
-                    static
-                    as={motion.div}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{
-                      opacity: 0,
-                      y: -10,
-                      transition: { duration: 0.2 },
-                    }}
-                  >
-                    <Box
-                      bg={backgroundColor}
-                      borderWidth="1px"
-                      borderColor={accentColor}
-                      borderRadius="xl"
-                      className="absolute right-0 mt-3 w-screen max-w-xs p-4"
-                    >
-                      <Box className="flex flex-col gap-1">
-                        {accountOptions.map((item) => (
-                          <Link
-                            as={NextLink}
-                            key={item.name}
-                            href={item.href}
-                            aria-label={item.desc}
-                            className="flex items-center"
-                            bg={backgroundColor}
-                            _hover={{ textDecoration: "none" }}
-                          >
-                            <div className="p-4">
-                              <item.icon className="text-blue-500" aria-hidden="true" />
-                            </div>
-                            <div>
-                              <Text fontFamily="inter">{item.name}</Text>
-                            </div>
-                          </Link>
-                        ))}
-                        <Link
-                          className="flex items-center rounded-md cursor-pointer"
-                          _hover={{ textDecoration: "none" }}
-                          onClick={() => signOut({ callbackUrl: "/" })}
-                        >
-                          <div className="p-4">
-                            <FiLogOut className="text-blue-500" />
-                          </div>
-                          <div>
-                            <Text fontFamily="inter">Sign Out</Text>
-                          </div>
-                        </Link>
-                      </Box>
-                    </Box>
-                  </Popover.Panel>
-                </Box>
-              )}
-            </AnimatePresence>
-          </>
-        )}
-      </Popover>
-    );
-  }
+
+  return (
+    <Menu>
+      <MenuButton border="solid" borderRadius="full" borderWidth="thin" borderColor={borderColor}>
+        <Box display="flex" alignItems="center" gap="3" p="1">
+          <Avatar size="sm" src={session.user.image} />
+          <Text data-cy="username" className="hidden lg:flex ltr:pr-2 rtl:pl-2" style={{ overflow: "hidden" }}>
+            {session.user.name || "New User"}
+          </Text>
+        </Box>
+      </MenuButton>
+      <MenuList p="2" borderRadius="xl" shadow="none">
+        <Box display="flex" flexDirection="column" alignItems="center" borderRadius="md" p="1" gap="2">
+          <Text style={{ overflow: "hidden" }}>
+            {session.user.name}
+            {isAdminOrMod ? (
+              <Badge size="xs" ml="2" fontSize="xs" textTransform="capitalize">
+                {session.user.role}
+              </Badge>
+            ) : null}
+          </Text>
+          <UserScore />
+        </Box>
+        <MenuDivider />
+        <MenuGroup>
+          {options.map((item) => (
+            <Link
+              key={item.name}
+              as={item.isExternal ? "a" : NextLink}
+              isExternal={item.isExternal}
+              href={item.href}
+              _hover={{ textDecoration: "none" }}
+            >
+              <MenuItem gap="3" borderRadius="md" p="4">
+                <item.icon size="1em" className="text-blue-500" aria-hidden="true" />
+                <Text>{item.name}</Text>
+              </MenuItem>
+            </Link>
+          ))}
+        </MenuGroup>
+        <MenuDivider />
+        <MenuItem gap="3" borderRadius="md" p="4" onClick={handleSignOut}>
+          <LogOut size="1em" className="text-blue-500" aria-hidden="true" />
+          <Text>{t("sign_out")}</Text>
+        </MenuItem>
+      </MenuList>
+    </Menu>
+  );
 }
 
 export default UserMenu;
